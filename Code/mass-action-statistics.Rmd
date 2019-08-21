@@ -1,0 +1,367 @@
+---
+title: "mass-action-statistics"
+author: "Nobuaki Masaki"
+date: "5 August 2019"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(data.table)
+library(parallel)
+setwd("MA_stationary_distros")
+
+calculate_error_MA <- function(x_y_df_stationary, n, x_bar, x2_bar, x3_bar) {
+  
+  var_x <- x2_bar - x_bar^2
+  xyn_bar <- sum(x_y_df_stationary$x*x_y_df_stationary$y^n*x_y_df_stationary$t)/sum(x_y_df_stationary$t)
+  x2yn_bar <- sum(x_y_df_stationary$x^2*x_y_df_stationary$y^n*x_y_df_stationary$t)/sum(x_y_df_stationary$t)
+  yn_bar <- sum(x_y_df_stationary$y^n*x_y_df_stationary$t)/sum(x_y_df_stationary$t)
+  cov_x_yn <- xyn_bar - x_bar*yn_bar
+  cov_x2_yn <- x2yn_bar - x2_bar*yn_bar
+  cov_x2_x <- x3_bar - x2_bar*x_bar
+
+  lhs_AB <- 1/x_bar + cov_x_yn/x_bar/yn_bar
+  rhs_AB <- var_x/x_bar^2
+  
+  error_AB <- 2*(lhs_AB-rhs_AB)/(lhs_AB+rhs_AB)
+  
+  lhs_BC <- cov_x_yn/x_bar/yn_bar + cov_x2_x/2/x_bar^3
+  rhs_BC <- var_x/x_bar^2 + (cov_x2_yn + cov_x_yn)/2/x_bar^2/yn_bar + var_x/2/x_bar^3 
+    
+  error_BC <- 2*(lhs_BC-rhs_BC)/(lhs_BC+rhs_BC)
+
+  return(list(error_AB, error_BC))
+}
+
+calculate_error_iter_MA <- function(n, x_y_df_stationary, x_bar, x2_bar, x3_bar) {
+  
+  error <- calculate_error_MA(x_y_df_stationary, n, x_bar, x2_bar, x3_bar)
+  
+  return(error)
+}
+
+Generate_Poisson <- function(x_bar, x_max) {
+   x <- seq(0, x_max)
+   x <- as.data.frame(x)
+   x$t <- dpois(x$x, x_bar, log = FALSE)
+   return(x)
+}
+
+KLD <- function(x_y_df_stationary) {
+  x_y_df_stationary <- x_y_df_stationary %>%
+    group_by(x) %>%
+    summarize(t = sum(t)) %>%
+    mutate(t = t/sum(t))
+  x_bar <- sum(x_y_df_stationary$x*x_y_df_stationary$t)/sum(x_y_df_stationary$t)
+  x_max <- max(x_y_df_stationary$x)
+  poisson <- Generate_Poisson(x_bar, x_max)
+  d_ <- left_join(x_y_df_stationary, poisson, by = "x")
+  colnames(d_) <- c("x", "t1", "t2")
+  #d_<-d_[(d_$t2>0),]
+  #d_<-d_[d_$t2>0.000000000000000000001,]
+  KLD <- sum(d_$t1*log(d_$t1/d_$t2))
+  return(KLD)
+}
+
+BC <- function(x_y_df_stationary) {
+  x_y_df_stationary <- x_y_df_stationary %>%
+    group_by(x) %>%
+    summarize(t = sum(t)) %>%
+    mutate(t = t/sum(t))
+  x_bar <- sum(x_y_df_stationary$x*x_y_df_stationary$t)/sum(x_y_df_stationary$t)
+  x_max <- max(x_y_df_stationary$x)
+  poisson <- Generate_Poisson(x_bar, x_max)
+  d_ <- left_join(x_y_df_stationary, poisson, by = "x")
+  colnames(d_) <- c("x", "t1", "t2")
+  BC <- sum(sqrt(d_$t1*d_$t2))
+  return(BC)
+}
+
+Fc <- function(sta){
+  x_bar <- sum(sta$x*sta$t)/sum(sta$t)
+  R_plus <- sum(sta$R_plus*sta$t)/sum(sta$t)
+  R_minus <- sum(sta$R_minus*sta$t)/sum(sta$t)
+  eta_xR_plus <- (sum(sta$x*sta$R_plus*sta$t)/sum(sta$t) - x_bar*R_plus)/x_bar/R_plus
+  Fc <- eta_xR_plus/(1/x_bar + eta_xR_plus)
+  return(Fc)
+}
+
+gradient_MA <- function(design_matrix, true_n) {
+  n_plus <- design_matrix %>% filter(n < true_n + 0.10001 & n > true_n + 0.09999)
+  n_minus <- design_matrix %>% filter(n < true_n - 0.09999 & n > true_n - 0.10001)
+
+  derrorAB_dn <- (n_plus$error_AB - n_minus$error_AB)/0.2
+  derrorBC_dn <- (n_plus$error_BC - n_minus$error_BC)/0.2
+  
+  return(list(derrorAB_dn, derrorBC_dn))
+}
+
+calculate_error_MA_batch <- function(sta, x_bar, x2_bar, x3_bar, n) {
+  
+  KLD <- KLD(sta)
+  BC <- BC(sta)
+  Fc <- Fc(sta)
+  
+  n_list <- c(n - 0.1, n, n + 0.1)
+  
+  error <- lapply(n_list, calculate_error_iter_MA, 
+                x_y_df_stationary = sta, 
+                x_bar = x_bar, 
+                x2_bar = x2_bar, 
+                x3_bar = x3_bar)
+  
+  design_matrix <- as.data.frame(n_list)
+  
+  error_ABC <- t(matrix(unlist(error), nrow=length(unlist(error[1]))))
+  design_matrix$error_AB <- error_ABC[ ,1]
+  design_matrix$error_BC <- error_ABC[ ,2]
+  colnames(design_matrix) <- c("n", "error_AB", "error_BC")
+  
+  gradient_list <- gradient_MA(design_matrix, n)
+  gradient <- t(matrix(unlist(gradient_list), nrow=length(unlist(gradient_list[1]))))
+  derrorAB_dn <- gradient[[1]]
+  derrorBC_dn <- gradient[[2]]
+  
+  return(list(KLD, BC, Fc, derrorAB_dn, derrorBC_dn, x_bar))
+}
+
+calculate_error_iter_MA_batch <- function(design_matrix, x_y_df_stationary) {
+    
+  intended_x_bar <- design_matrix$x_bar
+  intended_y_bar <- design_matrix$y_bar
+  intended_gamma <- design_matrix$gamma
+  intended_true_n <- design_matrix$true_n
+  
+  x_y_df_stationary_ <- x_y_df_stationary %>% 
+    filter(x_bar == intended_x_bar & y_bar == intended_y_bar & gamma == intended_gamma & true_n == intended_true_n)
+  
+  x_bar <- sum(x_y_df_stationary_$x*x_y_df_stationary_$t)/sum(x_y_df_stationary_$t)
+  x2_bar <- sum(x_y_df_stationary_$x^2*x_y_df_stationary_$t)/sum(x_y_df_stationary_$t)
+  x3_bar <- sum(x_y_df_stationary_$x^3*x_y_df_stationary_$t)/sum(x_y_df_stationary_$t)
+  
+  d_ <- calculate_error_MA_batch(x_y_df_stationary_, x_bar, x2_bar, x3_bar, intended_true_n)
+  
+  return(d_)
+}
+
+MA_tbl <- 
+    list.files(pattern = "*.csv") %>% 
+    map_df(~fread(.))
+
+colnames(MA_tbl) <- c("x", "y", "t", "x_bar", "y_bar", "gamma", "true_n")
+```
+
+```{r}
+design_matrix <- MA_tbl %>% 
+  group_by(x_bar, y_bar, gamma, true_n) %>% 
+  filter(row_number() == 1) %>%
+  select(x_bar, y_bar, gamma, true_n)
+
+colnames(design_matrix) <- c("x_bar", "y_bar", "gamma", "true_n")
+
+d_ <- list()
+    
+for (i in seq(nrow(design_matrix))) {
+     l <- as.list(design_matrix[i,])
+     d_[[i]] <- l
+}
+
+set.seed(17)
+stats_ <- lapply(d_, calculate_error_iter_MA_batch, x_y_df_stationary = MA_tbl)
+stats_ <- t(matrix(unlist(stats_), nrow=length(unlist(stats_[1]))))
+
+design_matrix$KLD <- stats_[ ,1]
+design_matrix$BC <- stats_[,2]
+design_matrix$Fc <- stats_[,3]
+design_matrix$derrorAB_dn <- stats_[,4]
+design_matrix$derrorBC_dn <- stats_[,5]
+design_matrix$emp_x_bar <- stats_[,6]
+```
+
+```{r}
+ma_batch_1 <- design_matrix %>% filter(gamma == 1 & y_bar == 50)
+ma_batch_2 <- design_matrix %>% filter(gamma == 1 & x_bar == 50)
+ma_batch_3 <- design_matrix %>% filter(x_bar == 50 & y_bar == 50)
+
+ggplot(ma_batch_3, aes(gamma, derrorBC_dn)) + geom_point() + facet_wrap(vars(true_n))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+true_n_list <- seq(1,3,1)
+true_lambda_list <- c(1, 5, 10)
+true_x_bar_list <- c(1, 5, 10)
+
+design_matrix_2 <- true_n_list %>%
+    merge(true_lambda_list, by = NULL) %>%
+    merge(true_x_bar_list, by = NULL)
+
+colnames(design_matrix_2) <- c("n", "lambda", "adj_x_bar")
+design_matrix_2 <- as.data.frame(design_matrix_2)
+
+d2_ <- list()
+    
+for (i in seq(nrow(design_matrix_2))) {
+     l <- as.list(design_matrix_2[i,])
+     d2_[[i]] <- l
+}
+
+set.seed(17)
+d_ <- lapply(d2_, calculate_error_iter_MA_batch, N = 1000000, alpha = 10, beta = 1, gamma = 0.1)
+
+d_gradients <- t(matrix(unlist(d_), nrow=length(unlist(d_[1]))))
+design_matrix_2$KLD <- d_gradients[ ,1]
+design_matrix_2$BC <- d_gradients[ ,2]
+design_matrix_2$Fc <- d_gradients[ ,3]
+design_matrix_2$eta_x_R_plus <- d_gradients[ ,4]
+design_matrix_2$derrorAB_dn <- d_gradients[ ,5]
+design_matrix_2$derrorBC_dn <- d_gradients[ ,6]
+design_matrix_2$x_bar <- d_gradients[ ,7]
+```
+
+```{r}
+MA <- read.csv("mass-action-statistics.csv")
+MA$adj_x_bar_factor <- as.factor(MA$adj_x_bar)
+MA$adj_x_bar_factor <- revalue(MA$adj_x_bar_factor, c("10"="mean of x = 10", "50"="mean of x = 50", "100"="mean of x = 100"))
+
+MA$adj_y_bar_factor <- as.factor(MA$lambda)
+MA$adj_y_bar_factor <- revalue(MA$adj_y_bar_factor, c("1"="mean of y = 10", "5"="mean of y = 50", "10"="mean of y = 100"))
+
+ggplot(MA, aes(n, derrorBC_dn)) + geom_point() + facet_grid(vars(adj_y_bar_factor), vars(adj_x_bar_factor)) + labs(x = TeX("$n^*$"), y = TeX("$\\frac{dE3(n^*)}{dn}$"), title = TeX("$n^*$ vs. Slope of the Skewness Invariant")) + theme_bw() + theme(text = element_text(size=20), plot.title = element_text(hjust = 0.5)) + scale_color_continuous(name=TeX("$n^*$")) 
+
+ggplot(MA, aes(Fc, derrorAB_dn)) + geom_point() + facet_grid(vars(adj_y_bar_factor), vars(adj_x_bar_factor)) + labs(x = TeX("$F_c$"), y = TeX("$\\frac{dE2(n^*)}{dn}$"), title = TeX("$F_c$ vs. Slope of the Variance Invariant")) + theme_bw() + theme(text = element_text(size=20), plot.title = element_text(hjust = 0.5)) + scale_color_continuous(name=TeX("$n^*$"))
+
+ggplot(MA, aes(Fc, derrorBC_dn)) + geom_point() + facet_grid(vars(adj_y_bar_factor), vars(adj_x_bar_factor)) + labs(x = TeX("$F_c$"), y = TeX("$\\frac{dE3(n^*)}{dn}$"), title = TeX("$F_c$ vs. Slope of the Skewness Invariant")) + theme_bw() + theme(text = element_text(size=20), plot.title = element_text(hjust = 0.5)) + scale_color_continuous(name=TeX("$n^*$")) 
+```
+
+```{r}
+n_list <- seq(1, 7, 0.1)
+error <- lapply(n_list, calculate_error_iter_MA, 
+                x_y_df_stationary = sta, 
+                x_bar = x_bar, 
+                x2_bar = x2_bar, 
+                x3_bar = x3_bar)
+
+design_matrix <- as.data.frame(n_list)
+
+error_ABC <- t(matrix(unlist(error), nrow=length(unlist(error[1]))))
+design_matrix$error_AB <- error_ABC[ ,1]
+design_matrix$error_BC <- error_ABC[ ,2]
+colnames(design_matrix) <- c("n", "error_AB", "error_BC")
+
+
+```
+
+```{r}
+ggplot(design_matrix, aes(n, error_BC)) + geom_point() + geom_point(aes(n, error_AB))
+```
+
+```{r}
+N <- 1000000
+alpha <- 10
+beta <- 1
+lambda <- 0.2
+gamma <- 0.1
+n <- 0
+adj_x_bar <- 100
+
+sta <- simple_gillespie_MA(N, alpha, beta, lambda, gamma, n)
+x_bar <- sum(sta$x*sta$t)/sum(sta$t)
+alpha_new <- alpha*adj_x_bar/x_bar
+  
+sta <- simple_gillespie_MA(N, alpha_new, beta, lambda, gamma, n)
+x_bar <- sum(sta$x*sta$t)/sum(sta$t)
+alpha_new <- alpha_new*adj_x_bar/x_bar
+  
+sta <- simple_gillespie_MA(N, alpha_new, beta, lambda, gamma, n)
+x_bar <- sum(sta$x*sta$t)/sum(sta$t)
+x2_bar <- sum(sta$x^2*sta$t)/sum(sta$t)
+x3_bar <- sum(sta$x^3*sta$t)/sum(sta$t)
+
+n_list <- seq(0, 5, 0.1)
+error <- lapply(n_list, calculate_error_iter_MA, 
+                x_y_df_stationary = sta, 
+                x_bar = x_bar, 
+                x2_bar = x2_bar, 
+                x3_bar = x3_bar)
+
+design_matrix <- as.data.frame(n_list)
+
+error_ABC <- t(matrix(unlist(error), nrow=length(unlist(error[1]))))
+design_matrix$error_AB <- error_ABC[ ,1]
+design_matrix$error_BC <- error_ABC[ ,2]
+design_matrix <- design_matrix %>% mutate(true_n = 0)
+colnames(design_matrix) <- c("n", "error_AB", "error_BC", "true_n")
+
+n_list_2 <- seq(1,4)
+for (n in n_list_2) {
+
+  N <- 1000000
+  alpha <- 10
+  beta <- 1
+  lambda <- 0.2
+  gamma <- 0.1
+  adj_x_bar <- 100
+  
+  sta <- simple_gillespie_MA(N, alpha, beta, lambda, gamma, n)
+  x_bar <- sum(sta$x*sta$t)/sum(sta$t)
+  alpha_new <- alpha*adj_x_bar/x_bar
+    
+  sta <- simple_gillespie_MA(N, alpha_new, beta, lambda, gamma, n)
+  x_bar <- sum(sta$x*sta$t)/sum(sta$t)
+  alpha_new <- alpha_new*adj_x_bar/x_bar
+    
+  sta <- simple_gillespie_MA(N, alpha_new, beta, lambda, gamma, n)
+  x_bar <- sum(sta$x*sta$t)/sum(sta$t)
+  x2_bar <- sum(sta$x^2*sta$t)/sum(sta$t)
+  x3_bar <- sum(sta$x^3*sta$t)/sum(sta$t)
+  
+  n_list <- seq(0, 5, 0.1)
+  error <- lapply(n_list, calculate_error_iter_MA, 
+                  x_y_df_stationary = sta, 
+                  x_bar = x_bar, 
+                  x2_bar = x2_bar, 
+                  x3_bar = x3_bar)
+  
+  design_matrix_2 <- as.data.frame(n_list)
+  
+  error_ABC <- t(matrix(unlist(error), nrow=length(unlist(error[1]))))
+  design_matrix_2$error_AB <- error_ABC[ ,1]
+  design_matrix_2$error_BC <- error_ABC[ ,2]
+  design_matrix_2 <- design_matrix_2 %>% mutate(true_n = n)
+  colnames(design_matrix_2) <- c("n", "error_AB", "error_BC", "true_n")
+  design_matrix <- rbind(design_matrix, design_matrix_2)
+}
+```
+
+```{r}
+library(ggthemes)
+colnames(design_matrix) <- c("Tested_n", "Variance_Invariant", "Skewness_Invariant", "True_n")
+p1 <- ggplot(design_matrix %>% filter(True_n != 0 & Tested_n != 0), aes(Tested_n, Variance_Invariant, color = as.factor(True_n))) + geom_line() + geom_hline(yintercept = 0, color = "grey") + geom_vline(xintercept = c(1,2,3,4), color = "grey") + labs(x = "Tested n", y = "Variance Invariant Error", color = "True n") + theme_bw() + theme(text = element_text(size=20), plot.title = element_text(hjust = 0.5))
+
+p2 <- ggplot(design_matrix %>% filter(True_n != 0 & Tested_n != 0), aes(Tested_n, Skewness_Invariant, color = as.factor(True_n))) + geom_line() + geom_hline(yintercept = 0, color = "grey") + geom_vline(xintercept = c(1,2,3,4), color = "grey") + labs(x = "Tested n", y = "Variance Invariant Error", color = "True n") + theme_bw() + theme(text = element_text(size=20), plot.title = element_text(hjust = 0.5))
+
+grid.arrange(p1, p2, nrow = 1)
+```
+
+
+
