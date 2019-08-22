@@ -96,13 +96,42 @@ design_matrix <- design_matrix %>% mutate(error_AB = error[ ,1], error_BC = erro
 ```
 
 ```{r}
+library(latex2exp)
 setwd("C:\\Users\\Nobua\\Documents\\FUSRP")
-design_matrix <- read.csv("mass-action-sample.csv")
-design_matrix_cred_ivl <- design_matrix %>%
-  group_by(n) %>%
-  summarise(error_AB_25 = quantile(error_AB, 0.025), error_BC_25 = quantile(error_BC, 0.025), error_AB_975 = quantile(error_AB, 0.975), error_BC_975 = quantile(error_BC, 0.975))
+#xbar, ybar, gamma, n, samp_size, iteration
+design_matrix_500 <- read.csv("mass-action-sample_50_50_1_2_500_1000.csv")
+design_matrix_100 <- read.csv("mass-action-sample_50_50_1_2_100_1000.csv")
+design_matrix_1000 <- read.csv("mass-action-sample_50_50_1_2_1000_1000.csv")
+design_matrix_5000 <- read.csv("mass-action-sample_50_50_1_2_5000_1000.csv")
 
-ggplot(design_matrix, aes(n)) + geom_ribbon(data = design_matrix_cred_ivl, alpha = 0.1, aes(ymax = error_AB_975, ymin = error_AB_25))
+
+design_matrix_cred_ivl_500 <- design_matrix_500 %>%
+  group_by(n) %>%
+  summarise(error_AB_25 = quantile(error_AB, 0.025), error_BC_25 = quantile(error_BC, 0.025), error_AB_975 = quantile(error_AB, 0.975), error_BC_975 = quantile(error_BC, 0.975), mean_error_AB = mean(error_AB)) %>%
+  mutate(samp_size = 500)
+
+design_matrix_cred_ivl_100 <- design_matrix_100 %>%
+  group_by(n) %>%
+  summarise(error_AB_25 = quantile(error_AB, 0.025), error_BC_25 = quantile(error_BC, 0.025), error_AB_975 = quantile(error_AB, 0.975), error_BC_975 = quantile(error_BC, 0.975), mean_error_AB = mean(error_AB)) %>%
+  mutate(samp_size = 100)
+
+design_matrix_cred_ivl_1000 <- design_matrix_1000 %>%
+  group_by(n) %>%
+  summarise(error_AB_25 = quantile(error_AB, 0.025), error_BC_25 = quantile(error_BC, 0.025), error_AB_975 = quantile(error_AB, 0.975), error_BC_975 = quantile(error_BC, 0.975), mean_error_AB = mean(error_AB)) %>%
+  mutate(samp_size = 1000)
+
+design_matrix_cred_ivl_5000 <- design_matrix_5000 %>%
+  group_by(n) %>%
+  summarise(error_AB_25 = quantile(error_AB, 0.025), error_BC_25 = quantile(error_BC, 0.025), error_AB_975 = quantile(error_AB, 0.975), error_BC_975 = quantile(error_BC, 0.975), mean_error_AB = mean(error_AB)) %>%
+  mutate(samp_size = 5000)
+
+design_matrix_cred_ivl <- rbind(design_matrix_cred_ivl_100, design_matrix_cred_ivl_500, design_matrix_cred_ivl_1000, design_matrix_cred_ivl_5000)
+
+design_matrix_cred_ivl$samp_size <- factor(design_matrix_cred_ivl$samp_size)
+levels(design_matrix_cred_ivl$samp_size) <- c("N = 100", "N = 500", "N = 1000", "N = 5000")
+
+ggplot(design_matrix_cred_ivl, aes(n)) + geom_ribbon(alpha = 0.1, aes(ymax = error_AB_975, ymin = error_AB_25)) + geom_line(aes(y = mean_error_AB)) + facet_wrap(vars(samp_size), nrow = 2) + geom_hline(yintercept = 0) + geom_vline(xintercept = 2) + labs(title = "95% Credible Interval of Variance Invariant for Different Sample Sizes", x = "Tested Exponent n", y = "Variance Invariant Error", caption = TeX("$<x_1> = 50$, $<x_2> = 50$, $\\beta_1 = 1$, $n = 2$")) + theme_bw() + theme(text = element_text(size=20), plot.title = element_text(hjust = 0.5))
+
 ```
 
 

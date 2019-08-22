@@ -180,12 +180,22 @@ design_matrix$emp_x_bar <- stats_[,6]
 ```
 
 ```{r}
+library(latex2exp)
+
+design_matrix$true_n <- factor(design_matrix$true_n)
+levels(design_matrix$true_n) <- c("true n = 1", "true n = 2", "true n = 3", "true n = 4")
+
 ma_batch_1 <- design_matrix %>% filter(gamma == 1 & y_bar == 50)
 ma_batch_2 <- design_matrix %>% filter(gamma == 1 & x_bar == 50)
 ma_batch_3 <- design_matrix %>% filter(x_bar == 50 & y_bar == 50)
 
-ggplot(ma_batch_3, aes(gamma, derrorBC_dn)) + geom_point() + facet_wrap(vars(true_n))
+a <- ggplot(ma_batch_1, aes(x_bar, derrorAB_dn)) + geom_point() + facet_wrap(vars(true_n)) + labs(x = TeX("$<x_2>$"), y = TeX("$\\frac{dE2}{dn}$"), caption = TeX("$<x_1> = 50$, $\\beta_1 = 1$"), tag = "A") + theme_bw() + theme(text = element_text(size=15), plot.title = element_text(hjust = 0.5))
 
+b <- ggplot(ma_batch_2, aes(y_bar, derrorAB_dn)) + geom_point() + facet_wrap(vars(true_n)) + labs(x = TeX("$<x_1>$"), y = TeX("$\\frac{dE2}{dn}$"), caption = TeX("$<x_2> = 50$, $\\beta_1 = 1$"), tag = "B") + theme_bw() + theme(text = element_text(size=15), plot.title = element_text(hjust = 0.5))
+
+c <- ggplot(ma_batch_3, aes(gamma, derrorAB_dn)) + geom_point() + facet_wrap(vars(true_n)) + labs(x = TeX("$\\beta_1$"), y = TeX("$\\frac{dE2}{dn}$"), caption = TeX("$<x_1> = 50$, $<x_2> = 50$"), tag = "C") + theme_bw() + theme(text = element_text(size=15), plot.title = element_text(hjust = 0.5))
+
+gridExtra::grid.arrange(a,b,c,nrow=2)
 ```
 
 
@@ -239,6 +249,7 @@ design_matrix_2$x_bar <- d_gradients[ ,7]
 ```
 
 ```{r}
+#setwd("..")
 MA <- read.csv("mass-action-statistics.csv")
 MA$adj_x_bar_factor <- as.factor(MA$adj_x_bar)
 MA$adj_x_bar_factor <- revalue(MA$adj_x_bar_factor, c("10"="mean of x = 10", "50"="mean of x = 50", "100"="mean of x = 100"))
