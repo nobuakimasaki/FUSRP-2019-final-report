@@ -86,3 +86,189 @@ error <- lapply(d_, calculate_error_iter_hill, x_y_df_stationary = hill_tbl)
 error <- t(matrix(unlist(error), nrow=length(unlist(error[1]))))
 design_matrix <- design_matrix %>% mutate(error_AB = error[ ,1], error_BC = error[,2])
 ```
+
+```{r}
+return_data_params <- function(file) {
+    
+  file_split <- strsplit(as.character(file), "_")[[1]]
+  true_n <- file_split[3]
+  true_K <- file_split[5]
+  y_bar <- file_split[7]
+  gamma <- file_split[9]
+  x_bar <- file_split[11]
+  
+  return(list(true_n, true_K, x_bar, y_bar, gamma))
+}
+
+n_1 <- read.csv("hill-function-batch_n_1.csv")
+
+param_list <- lapply(n_1$file, return_data_params)
+param_list <- t(matrix(unlist(param_list), nrow=length(unlist(param_list[1]))))
+
+n_1$true_n <- param_list[ ,1]
+n_1$true_K <- param_list[,2]
+n_1$x_bar <- param_list[,3]
+n_1$y_bar <- param_list[,4]
+n_1$gamma <- param_list[,5]
+
+n_2 <- read.csv("hill-function-batch_n_2.csv")
+
+param_list <- lapply(n_2$file, return_data_params)
+param_list <- t(matrix(unlist(param_list), nrow=length(unlist(param_list[1]))))
+
+n_2$true_n <- param_list[ ,1]
+n_2$true_K <- param_list[,2]
+n_2$x_bar <- param_list[,3]
+n_2$y_bar <- param_list[,4]
+n_2$gamma <- param_list[,5]
+
+n_3 <- read.csv("hill-function-batch_n_3.csv")
+
+param_list <- lapply(n_3$file, return_data_params)
+param_list <- t(matrix(unlist(param_list), nrow=length(unlist(param_list[1]))))
+
+n_3$true_n <- param_list[ ,1]
+n_3$true_K <- param_list[,2]
+n_3$x_bar <- param_list[,3]
+n_3$y_bar <- param_list[,4]
+n_3$gamma <- param_list[,5]
+
+n_4 <- read.csv("hill-function-batch_n_4.csv")
+
+param_list <- lapply(n_4$file, return_data_params)
+param_list <- t(matrix(unlist(param_list), nrow=length(unlist(param_list[1]))))
+
+n_4$true_n <- param_list[ ,1]
+n_4$true_K <- param_list[,2]
+n_4$x_bar <- param_list[,3]
+n_4$y_bar <- param_list[,4]
+n_4$gamma <- param_list[,5]
+
+n_5 <- read.csv("hill-function-batch_n_5.csv")
+
+param_list <- lapply(n_5$file, return_data_params)
+param_list <- t(matrix(unlist(param_list), nrow=length(unlist(param_list[1]))))
+
+n_5$true_n <- param_list[ ,1]
+n_5$true_K <- param_list[,2]
+n_5$x_bar <- param_list[,3]
+n_5$y_bar <- param_list[,4]
+n_5$gamma <- param_list[,5]
+
+n_6 <- read.csv("hill-function-batch_n_6.csv")
+
+param_list <- lapply(n_6$file, return_data_params)
+param_list <- t(matrix(unlist(param_list), nrow=length(unlist(param_list[1]))))
+
+n_6$true_n <- param_list[ ,1]
+n_6$true_K <- param_list[,2]
+n_6$x_bar <- param_list[,3]
+n_6$y_bar <- param_list[,4]
+n_6$gamma <- param_list[,5]
+
+hill <- rbind(n_1, n_2, n_3, n_4, n_5, n_6)
+
+#write.csv(hill, "hill-function-batch.csv", row.names = FALSE)
+hill <- fread("hill-function-batch.csv")
+hill_5_40 <- hill %>% filter(true_n == 5 & true_K == 70)
+hill_stat <- fread("hill-function-statistics.csv")
+hill_5_40_2 <- hill_5_40 %>% inner_join(hill_stat, by = c("true_n", "true_K", "x_bar", "y_bar", "gamma"))
+design_matrix <- hill_5_40_2 %>% filter(x_bar == 50, y_bar == 50, gamma == 0.1)
+
+hill_5_40_2$x_bar <- factor(hill_5_40_2$x_bar)
+hill_5_40_2$y_bar <- factor(hill_5_40_2$y_bar)
+hill_5_40_2$gamma <- factor(hill_5_40_2$gamma)
+levels(hill_5_40_2$x_bar) <- c("mean of x2 = 10", "mean of x2 = 50", "mean of x2 = 100")
+levels(hill_5_40_2$y_bar) <- c("mean of x1 = 10", "mean of x1 = 50", "mean of x1 = 100")
+levels(hill_5_40_2$gamma) <- c("beta1 = 0.1", "beta1 = 1", "beta1 = 10")
+```
+
+```{r}
+library(latex2exp)
+ggplot(hill_5_40_2, aes(n, K, fill = log(abs(error_AB)))) + geom_tile() + scale_fill_gradient(low = "#00416A", high = "white", name = TeX("$\\log{(|Err_2(n,K)|)}$")) + geom_text(aes(y = 0, x = 3, label = paste("Fc = ", round(Fc, digits = 2))), size=2) + facet_grid(y_bar ~ x_bar + gamma) + geom_vline(xintercept = 5) + geom_hline(yintercept = 70) + labs(title = TeX("$Err_2(n,K)$ Faceted By Parameter Values"), x = "Tested Exponent n", y = "Tested K", caption = TeX("$n^* = 5$, $K^* = 70$")) + theme_bw() + theme(text = element_text(size=13), plot.title = element_text(hjust = 0.5)) 
+
+ggplot(hill_5_40_2, aes(n, K, fill = log(abs(error_BC)))) + geom_tile() + scale_fill_gradient(low = "#00416A", high = "white", name = TeX("$\\log{(|Err_3(n,K)|)}$")) + geom_text(aes(y = 0, x = 3, label = paste("Fc = ", round(Fc, digits = 2))), size=2) + facet_grid(y_bar ~ x_bar + gamma) + geom_vline(xintercept = 5) + geom_hline(yintercept = 70) + labs(title = TeX("$Err_3(n,K)$ Faceted By Parameter Values"), x = "Tested Exponent n", y = "Tested K", caption = TeX("$n^* = 5$, $K^* = 70$")) + theme_bw() + theme(text = element_text(size=13), plot.title = element_text(hjust = 0.5))
+
+design_matrix_line_AB <- design_matrix %>%
+  mutate(error = abs(error_AB)) %>%
+  group_by(n) %>%
+  filter(error == min(error, na.rm = TRUE)) %>%
+  mutate(line = "Variance Invariant") %>%
+  select(n, K, error, line) %>%
+  filter(K < 100)
+
+design_matrix_line_BC <- design_matrix %>%
+  mutate(error = abs(error_BC)) %>%
+  group_by(n) %>%
+  filter(error == min(error, na.rm = TRUE)) %>%
+  mutate(line = "Skewness Invariant") %>%
+  select(n, K, error, line) %>%
+  filter(K < 100)
+
+design_matrix_lines_inner <- inner_join(design_matrix_line_AB, design_matrix_line_BC, by = c("n", "K"))
+design_matrix_lines <- rbind(design_matrix_line_AB, design_matrix_line_BC)
+design_matrix_lines <- design_matrix_lines %>% left_join(design_matrix_lines_inner, by = c("n", "K"))
+design_matrix_lines$line <- ifelse(is.na(design_matrix_lines$error.y), design_matrix_lines$line, "Intersection")
+
+design_matrix_lines$line <- factor(design_matrix_lines$line, levels = c("Variance Invariant", "Skewness Invariant", "Intersection"))
+
+ggplot(design_matrix_lines, aes(x = n, y = K, fill = line)) + geom_tile() + scale_fill_manual(values = c("red", "blue", "purple"), name = "Lines") + geom_vline(xintercept = 5) + geom_hline(yintercept = 70) + scale_x_continuous(breaks = seq(0,20)) + labs(title = "Lines of Minimum Error", x = "Tested Exponent n", y = "Tested K", caption = TeX("$n^* = 5$, $K^* = 70$, $<x_1> = 50$, $<x_2> = 50$, $\\beta_1 = 0.1$")) + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5))
+
+# cutoff_error_AB <- 0.005
+# cutoff_error_BC <- 0.005
+# 
+# design_matrix_error_AB <- design_matrix %>%
+#   mutate(error = abs(error_AB)) %>%
+#   filter(error <= cutoff_error_AB) %>%
+#   mutate(line = "Variance Invariant") %>%
+#   select(n, K, error, line)
+# 
+# design_matrix_error_BC <- design_matrix %>%
+#   mutate(error = abs(error_BC)) %>%
+#   filter(error <= cutoff_error_BC) %>%
+#   mutate(line = "Skewness Invariant") %>%
+#   select(n, K, error, line)
+# 
+# design_matrix_error <- rbind(design_matrix_error_AB, design_matrix_error_BC)
+# design_matrix_error_2 <- inner_join(design_matrix_error_AB, design_matrix_error_BC, by = c("n", "K"))
+# design_matrix_error_3 <- left_join(design_matrix_error, design_matrix_error_2, by = c("n", "K")) 
+# design_matrix_error_3$line <- ifelse(is.na(design_matrix_error_3$line.x), design_matrix_error_3$line, "Overlap")
+# design_matrix_error_3$line <- factor(design_matrix_error_3$line, levels = c("Variance Invariant", "Skewness Invariant", "Overlap"))
+# 
+# ggplot(design_matrix_error_3, aes(x = n, y = K, fill = line)) + geom_tile() + scale_fill_manual(values = c("red", "blue", "purple"), name = "Lines") + geom_vline(xintercept = 5) + geom_hline(yintercept = 70) + scale_x_continuous(breaks = seq(0,20)) + labs(title = "Regions of Minimum Error", x = "Tested Exponent n", y = "Tested K", caption = TeX("$n^* = 5$, $K^* = 70$, $<x_1> = 50$, $<x_2> = 50$, $\\beta_1 = 0.1$, $Err_2(n,K) < 0.005$, $Err_3(n,K) < 0.001$")) + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5))
+# 
+# design_matrix_error_2
+# 
+# hill <- function(y,n,K) {
+#   return((y^n/(y^n + K^n))*(50^12/(50^12 + 80^12))/(50^n/(50^n + K^n)))
+# }
+# 
+# Generate_Poisson <- function(x_bar, x_max) {
+#    x <- seq(0, x_max)
+#    x <- as.data.frame(x)
+#    x$t <- x_bar^x$x*exp(-x_bar)/factorial(x$x)
+#    return(x)
+# }
+# 
+# y <- 1:100
+# y <- as.data.frame(y)
+# 
+# design_matrix_error_inner <- design_matrix_error_2 %>% 
+#   mutate(setting = row_number()) %>% 
+#   merge(y, all = TRUE) 
+# 
+# hill_plot_AB <- design_matrix_error_inner %>% mutate(hill = hill(y = y, n = n, K = K))
+# poisson_AB <- Generate_Poisson(50, 100)
+# 
+# a <- ggplot(hill_plot_AB, aes(x = y, y = log(hill), color = factor(setting))) + geom_line(alpha = 0.5) + labs(title = "Hill Functions From Overlapping Region", x = "n", y = TeX("log(\\frac{y^n}{y^n + K^n})"), caption = TeX("$n^* = 5$, $K^* = 70$, $<x_1> = 50$, $<x_2> = 50$, $\\beta_1 = 0.1$")) + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5), legend.position = "none") 
+# 
+# b <- ggplot(poisson_AB) + aes(x = x, y = t) + geom_bar(stat = "identity") + labs(title = TeX("Distibution of $x_2$"), x = TeX("$x_2$"), y = "Mass") + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5)) + xlim(0, 100)
+# 
+# gA <- ggplotGrob(a)
+# gB <- ggplotGrob(b)
+# maxWidth = grid::unit.pmax(gA$widths[2:5], gB$widths[2:5])
+# gA$widths[2:5] <- as.list(maxWidth)
+# gB$widths[2:5] <- as.list(maxWidth)
+# gridExtra::grid.arrange(gB, gA, ncol=1)
+```
+
