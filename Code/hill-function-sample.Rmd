@@ -108,7 +108,7 @@ design_matrix <- design_matrix %>% mutate(error_AB = error[ ,1], error_BC = erro
 ```{r}
 setwd("C:\\Users\\Nobua\\Documents\\FUSRP")
 #write.csv(design_matrix, "hill-function-sample.csv", row.names = FALSE)
-design_matrix_1 <- read.csv("hill-function-sample__10_0.1_6_30_10_5_1000.csv")
+design_matrix <- read.csv("hill-function-sample_50_50_0.1_5_70_10-4_30.csv")
 
 #ggplot(design_matrix, aes(n,K,z = error_BC)) + geom_contour(aes(colour = stat(level))) + facet_wrap(vars(index)) + scale_color_gradient2() + theme_dark() + geom_vline(xintercept = 3) + geom_hline(yintercept = 75)
 
@@ -132,11 +132,85 @@ design_matrix_lines_inner <- inner_join(design_matrix_line_AB, design_matrix_lin
 
 design_matrix_lines <- rbind(design_matrix_line_AB, design_matrix_line_BC)
 
-ggplot(design_matrix_lines_inner, aes(x = n, y = K, group = index)) + geom_tile(alpha = 0.1) + geom_vline(xintercept = 6) + geom_hline(yintercept = 30) + scale_x_continuous(breaks = seq(0,20)) + labs(title = "Variance Invariant for N = 500", x = "Tested n", y = "Tested K") + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5))
+ggplot(design_matrix_lines_inner, aes(x = n, y = K, group = index)) + geom_tile(alpha = 1) + geom_vline(xintercept = 5) + geom_hline(yintercept = 70) + scale_x_continuous(breaks = seq(0,20)) + labs(title = "Variance Invariant for N = 500", x = "Tested n", y = "Tested K") + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5))
 
 length(unique(design_matrix_lines_inner$index))
 
-ggplot(design_matrix_lines, aes(x = n, y = K, fill = line)) + geom_tile(alpha = 0.1) + geom_vline(xintercept = 6) + geom_hline(yintercept = 30) + scale_x_continuous(breaks = seq(0,20)) + labs(title = "Variance Invariant for N = 500", x = "Tested n", y = "Tested K") + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5))
+ggplot(design_matrix_lines, aes(x = n, y = K, fill = line)) + geom_tile(alpha = 0.1) + geom_vline(xintercept = 5) + geom_hline(yintercept = 70) + scale_x_continuous(breaks = seq(0,20)) + labs(title = TeX("Variance Invariant for $N = 10^4$"), x = "Tested n", y = "Tested K") + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5))
 
 ggplot(design_matrix_lines, aes(x = n, y = K, fill = line)) + geom_tile() + geom_vline(xintercept = 3) + geom_hline(yintercept = 75) + scale_x_continuous(breaks = seq(0,20)) + labs(title = TeX("$10^4$"), x = "Tested n", y = "Tested K") + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5)) + facet_wrap(vars(index))
 ```
+
+```{r}
+design_matrix <- read.csv("hill-function-sample_50_50_0.1_5_70_10-3_30.csv")
+
+#ggplot(design_matrix, aes(n,K,z = error_BC)) + geom_contour(aes(colour = stat(level))) + facet_wrap(vars(index)) + scale_color_gradient2() + theme_dark() + geom_vline(xintercept = 3) + geom_hline(yintercept = 75)
+
+design_matrix_line_AB <- design_matrix %>%
+  mutate(error = abs(error_AB)) %>%
+  group_by(n, index) %>%
+  filter(error == min(error, na.rm = TRUE)) %>%
+  mutate(line = "Variance") %>%
+  select(n, K, error, line, index) %>%
+  filter(K < 100)
+
+design_matrix_line_BC <- design_matrix %>%
+  mutate(error = abs(error_BC)) %>%
+  group_by(n, index) %>%
+  filter(error == min(error, na.rm = TRUE)) %>%
+  mutate(line = "Skewness") %>%
+  select(n, K, error, line, index) %>%
+  filter(K < 100)
+
+design_matrix_lines_inner <- inner_join(design_matrix_line_AB, design_matrix_line_BC, by = c("n", "K", "index"))
+
+design_matrix_lines <- rbind(design_matrix_line_AB, design_matrix_line_BC)
+
+ggplot(design_matrix_lines_inner, aes(x = n, y = K, group = index)) + geom_tile(alpha = 1, fill = "purple") + geom_vline(xintercept = 5) + geom_hline(yintercept = 70) + labs(title = TeX("Sampled Intersection Points from Invariants ($N = 10^3$)"), x = "Tested n", y = "Tested K", caption = TeX("$n^* = 5$, $K^* = 70$,  $<x_1> = 50$, $<x_2> = 50$, $\\beta_1 = 0.1$")) + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5)) + xlim(4,8) + ylim(50, 100)
+
+length(unique(design_matrix_lines_inner$index))
+
+design_matrix_lines$line <- factor(design_matrix_lines$line, c("Variance", "Skewness"))
+
+p2 <- ggplot(design_matrix_lines, aes(x = n, y = K, fill = line)) + geom_tile(alpha = 0.1)+ scale_fill_manual(values = c("red", "blue"), name = "Invariant") + scale_x_continuous(breaks = seq(0,20)) + labs(title = TeX("Sampled Minimum Error from Invariants ($N = 10^3$)"), x = "Tested n", y = "Tested K", caption = TeX("$n^* = 5$, $K^* = 70$,  $<x_1> = 50$, $<x_2> = 50$, $\\beta_1 = 0.1$")) + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5), legend.position="bottom") + geom_hline(yintercept = 70) + geom_vline(xintercept = 5)
+
+p2
+```
+
+```{r}
+hill <- function(y,n,K) {
+  return((y^n/(y^n + K^n))*(50^12/(50^12 + 80^12))/(50^n/(50^n + K^n)))
+}
+
+Generate_Poisson <- function(x_bar, x_max) {
+   x <- seq(0, x_max)
+   x <- as.data.frame(x)
+   x$t <- x_bar^x$x*exp(-x_bar)/factorial(x$x)
+   return(x)
+}
+
+y <- 0:100
+y <- as.data.frame(y)
+  
+design_matrix_lines_inner$setting <- seq(81)  
+  
+design_matrix_lines_inner %>% merge(y, all = TRUE) -> design_matrix_error_inner
+
+design_matrix_error_inner %>% mutate(hill = hill(y = y, n = n, K = K)) -> hill_plot_AB
+
+hill_plot_AB <- design_matrix_error_inner %>% mutate(hill = hill(y = y, n = n, K = K))
+
+a <- ggplot(hill_plot_AB, aes(x = y, y = log(hill), color = factor(setting))) + geom_line(alpha = 0.5) + labs(title = "Hill Functions From Overlapping Region", x = TeX("$x_1$"), y = TeX("$log(f(x_1))$")) + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5), legend.position = "none")
+
+poisson_AB <- Generate_Poisson(50, 100)
+
+b <- ggplot(poisson_AB) + aes(x = x, y = t) + geom_bar(stat = "identity") + labs(title = TeX("Distribution of $x_1$"), x = TeX("x_1"), y = "Mass") + theme(text = element_text(size=20), axis.text.x = element_text(angle=90, hjust=1), plot.title = element_text(hjust = 0.5)) + xlim(0, 100)
+
+gA <- ggplotGrob(a)
+gB <- ggplotGrob(b)
+maxWidth = grid::unit.pmax(gA$widths[2:5], gB$widths[2:5])
+gA$widths[2:5] <- as.list(maxWidth)
+gB$widths[2:5] <- as.list(maxWidth)
+gridExtra::grid.arrange(gB, gA, ncol=1)
+```
+
