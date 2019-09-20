@@ -1,8 +1,22 @@
+#This code is used to generate the data, hill-function-statistics_n_1.csv, required for all the plots involving statistics 
+#(such as the gradients, KLD, and BC) of stationary distributions generated from a Hill function
+#(the suffix 1 denotes that this code is used to generate this data for stationary distributions
+#where n = 1).
+#Note that none of these plots were used in the paper, but the data from this file was used to create
+#P8 and P9 in hill-function-batch.Rmd (These plots display the Fc values of each stationary distribution.)
+#Note that x and y in the code refer to x_2 and x_1 respectively in the paper.
+
 library(tidyverse)
 library(data.table)
 library(parallel)
+#This directory must be created, with all of the stationary distributions generated from true n = 1,
+#before the code is run.
 setwd("Hill_Stationary_Correct//n_1")
 
+#This function is used to calcuate the 2nd and 3rd degree invariant errors for a specific test n, K.
+#x_y_df_stationary denotes the stationary distribution. n and K denote the test n and K values.
+#x_bar, x2_bar, x3_bar denote E[x], E[x^2], and E[x^3] respectively. These must be calcuated beforehand
+#and fed into the function.
 calculate_error_hill <- function(x_y_df_stationary, n, K, x_bar, x2_bar, x3_bar) {
   
   xyn_yn_Kn_bar <- sum(x_y_df_stationary$x*x_y_df_stationary$y^n/(x_y_df_stationary$y^n+K^n)*x_y_df_stationary$t)/sum(x_y_df_stationary$t)
@@ -22,6 +36,11 @@ calculate_error_hill <- function(x_y_df_stationary, n, K, x_bar, x2_bar, x3_bar)
   return(list(error_AB, error_BC))
 }
 
+#This function is used to iterate across different test n, K pairs as well as different stationary
+#distributions generated from different true n, K pairs. It calls the previous function
+#for every iteration, returning a list containing the 2nd and 3rd degree invariant errors for all
+#tested n, K pairs for every stationary distribution. 
+#design_matrix denotes a list with test n, K values to evaluate the invariant errors at.
 calculate_error_iter_hill <- function(design_matrix, x_y_df_stationary, x_bar, x2_bar, x3_bar) {
   
   n <- design_matrix$n
@@ -32,6 +51,9 @@ calculate_error_iter_hill <- function(design_matrix, x_y_df_stationary, x_bar, x
   return(error)
 }
 
+#Helper function for generating a Poisson distribution. 
+#Used to calculate the KLD and BC between the stationary distribution 
+#and the Poisson distribution with the same mean
 Generate_Poisson <- function(x_bar, x_max) {
   x <- seq(0, x_max)
   x <- as.data.frame(x)
@@ -39,6 +61,8 @@ Generate_Poisson <- function(x_bar, x_max) {
   return(x)
 }
 
+#Calculates the KLD between the stationary distribution 
+#and the Poisson distribution with the same mean
 KLD <- function(x_y_df_stationary) {
   x_y_df_stationary <- x_y_df_stationary %>%
     group_by(x) %>%
@@ -55,6 +79,8 @@ KLD <- function(x_y_df_stationary) {
   return(KLD)
 }
 
+#Calculates the BC between the stationary distribution
+#and the Poisson distribution with the same mean
 BC <- function(x_y_df_stationary) {
   x_y_df_stationary <- x_y_df_stationary %>%
     group_by(x) %>%
@@ -69,6 +95,8 @@ BC <- function(x_y_df_stationary) {
   return(BC)
 }
 
+#Calculates the Fc between the stationary distribution
+#and the Poisson distribution with the same mean
 Fc <- function(sta, n, K){
   x_bar <- sum(sta$x*sta$t)/sum(sta$t)
   xyn_yn_Kn_bar <- sum(sta$x*sta$y^n/(sta$y^n+K^n)*sta$t)/sum(sta$t)
@@ -81,6 +109,7 @@ Fc <- function(sta, n, K){
   return(Fc)
 }
 
+#Calculates the partial derivatives of the invariants at the true value of n and K
 gradient_hill <- function(design_matrix, true_n, true_K) {
   n_plus <- design_matrix %>% filter(n < true_n + 0.10001 & n > true_n + 0.09999 & K == true_K)
   n_minus <- design_matrix %>% filter(n < true_n - 0.09999 & n > true_n - 0.10001 & K == true_K)
@@ -101,6 +130,11 @@ gradient_hill <- function(design_matrix, true_n, true_K) {
   return(list(derrorAB_dn, derrorBC_dn, derrorAB_dK, derrorBC_dK))
 }
 
+#Calculates the above statistics for a given stationary distribution
+#sta denots the stationary distribution
+#x_bar, x2_bar, x3_bar denote E[x], E[x^2], and E[x^3] respectively. These must be calcuated beforehand
+#and fed into the function
+#n and K denote the true n and K value
 calculate_error_hill_batch <- function(sta, x_bar, x2_bar, x3_bar, n, K) {
   
   KLD <- KLD(sta)
@@ -141,6 +175,10 @@ calculate_error_hill_batch <- function(sta, x_bar, x2_bar, x3_bar, n, K) {
   return(list(KLD, BC, Fc, derrorAB_dn, derrorBC_dn, derrorAB_dK, derrorBC_dK, x_bar))
 }
 
+#This function is used to iterate across different different stationary
+#distributions generated from different parameters. It calls the previous function
+#for every iteration, returning a list containing statistics of interest like KLD and BC
+#design_matrix denotes a list with different parameter values used to create the stationary distributions
 calculate_error_iter_hill_batch <- function(design_matrix, x_y_df_stationary) {
   
   intended_x_bar <- design_matrix$x_bar
@@ -161,12 +199,15 @@ calculate_error_iter_hill_batch <- function(design_matrix, x_y_df_stationary) {
   return(d_)
 }
 
+#loading all of the files in Hill_Stationary_Correct//n_1
 hill_tbl <- 
   list.files(pattern = "*.csv") %>% 
   map_df(~fread(.))
 
 colnames(hill_tbl) <- c("x", "y", "t", "x_bar", "y_bar", "gamma", "true_n", "true_K")
 
+#Creating the design matrix 
+#(list of parameter values that the stationary distributions were generated from)
 design_matrix <- hill_tbl %>% 
   group_by(x_bar, y_bar, gamma, true_n, true_K) %>% 
   filter(row_number() == 1) %>%
@@ -174,6 +215,7 @@ design_matrix <- hill_tbl %>%
 
 colnames(design_matrix) <- c("x_bar", "y_bar", "gamma", "true_n", "true_K")
 
+#coercing design matrix into list
 d_ <- list()
 
 for (i in seq(nrow(design_matrix))) {
@@ -181,6 +223,7 @@ for (i in seq(nrow(design_matrix))) {
   d_[[i]] <- l
 }
 
+#Applying calculate_error_iter_hill_batch to the design_matrix.
 set.seed(17)
 stats_ <- mclapply(d_, calculate_error_iter_hill_batch, x_y_df_stationary = hill_tbl, mc.cores = 160)
 stats_ <- t(matrix(unlist(stats_), nrow=length(unlist(stats_[1]))))
@@ -194,5 +237,6 @@ design_matrix$derrorAB_dK <- stats_[,6]
 design_matrix$derrorBC_dK <- stats_[,7]
 design_matrix$emp_x_bar <- stats_[,8]
 
+#writing the data to a csv file
 setwd("..//..")
 write.csv(design_matrix, "hill-function-statistics_n_1.csv")
