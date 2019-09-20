@@ -6,11 +6,21 @@ output: html_document
 ---
 
 ```{r}
+#This code is used to create plots of the credible interval for the MA invariant lines across different parameter values (the data is named mass-action-sample.csv). Note that x and y in the code refer to x_2 and x_1 respectively in the paper.
+
+#This chunk loads the necessary packages and the data
+
 library(tidyverse)
 library(data.table)
 library(parallel)
+#This directory must be created, with all of the stationary distributions generated from MA before 
+#the code is run
 setwd("MA_stationary_distros")
 
+#This function is used to calcuate the 2nd and 3rd degree invariant errors for a specific test n.
+#x_y_df_stationary denotes the stationary distribution. n denotes the test n values.
+#x_bar, x2_bar, x3_bar denote E[x], E[x^2], and E[x^3] respectively. These must be calcuated beforehand
+#and fed into the function.
 calculate_error_MA <- function(x_y_df_stationary, n, x_bar, x2_bar, x3_bar) {
   
   var_x <- x2_bar - x_bar^2
@@ -34,6 +44,20 @@ calculate_error_MA <- function(x_y_df_stationary, n, x_bar, x2_bar, x3_bar) {
   return(list(error_AB, error_BC))
 }
 
+#This function first isolates the stationary distribution that we want to sample from.
+#This stationary distribution is specified with the arguments intended_x_bar, intended_y_bar
+#intended_gamma, and intended_true_n.
+
+#Each iteration of this function then denotes a specific sample from this stationary distribution,
+#as well as a specific test n value. It calls the previous function
+#for every iteration, returning a list containing the 2nd and 3rd degree invariant errors for all
+#tested n for each sample. 
+
+#The design_matrix denotes a list with test n values to evaluate the invariant errors at as well
+#as the seed used for sampling from the stationary distribution.
+#x_y_df_stationary denotes the stationary distributions in the directory MA_stationary_distros
+#binded together.
+#samp_size denotes the number of samples drawn for each iteration.
 calculate_error_iter_MA_sample <- function(design_matrix, x_y_df_stationary, intended_x_bar, intended_y_bar, intended_gamma, intended_true_n, samp_size) {
   
   n <- design_matrix$n
@@ -61,11 +85,13 @@ calculate_error_iter_MA_sample <- function(design_matrix, x_y_df_stationary, int
   return(error)
 }
 
+#Helper function to obtain same sample by utilizing the same seed. Used in the previous function.
 mod_sample <- function(x, size, replace, prob, seed) {
   set.seed(seed)
   return(sample(x, size, replace, prob))
 }
 
+#Reading all of the files in MA_stationary_distros
 MA_tbl <- 
     list.files(pattern = "*.csv") %>% 
     map_df(~fread(.))
@@ -74,6 +100,9 @@ colnames(MA_tbl) <- c("x", "y", "t", "x_bar", "y_bar", "gamma", "true_n")
 ```
 
 ```{r}
+#The result of this chunk is already written to a csv (imported in the next chunk)
+
+#Creating the design matrix. Index denotes the seed that is used in every iteration of sampling.
 index <- seq(1000)
 n <- seq(0, 6, 0.1)
 
@@ -81,6 +110,7 @@ design_matrix <- merge(index, n, by = NULL)
 
 colnames(design_matrix) <- c("index", "n")
  
+#Coercing the design matrix into a list
 d_ <- list()
     
 for (i in seq(nrow(design_matrix))) {
@@ -89,22 +119,24 @@ for (i in seq(nrow(design_matrix))) {
 }
 
 set.seed(17)
+#Applying calculate_error_iter_MA_sample to the design_matrix. The sample size is set 500, but this can be changed
 error <- lapply(d_, calculate_error_iter_MA_sample, x_y_df_stationary = MA_tbl, intended_x_bar = 50, intended_y_bar = 50, intended_gamma = 1, intended_true_n = 2, samp_size = 500)
-
+#Attatching invariant errors to the design_matrix
 error <- t(matrix(unlist(error), nrow=length(unlist(error[1]))))
 design_matrix <- design_matrix %>% mutate(error_AB = error[ ,1], error_BC = error[,2])
 ```
 
 ```{r}
 library(latex2exp)
-setwd("C:\\Users\\Nobua\\Documents\\FUSRP")
-#xbar, ybar, gamma, n, samp_size, iteration
+#setwd("C:\\Users\\Nobua\\Documents\\FUSRP")
+
+#These files are saved in the Data section. The values denote xbar, ybar, gamma, n, samp_size, and iteration. For example, the first dataset being read corresponds to what is being generated from the current parameters in the previous chunk
 design_matrix_500 <- read.csv("mass-action-sample_50_50_1_2_500_1000.csv")
 design_matrix_100 <- read.csv("mass-action-sample_50_50_1_2_100_1000.csv")
 design_matrix_1000 <- read.csv("mass-action-sample_50_50_1_2_1000_1000.csv")
 design_matrix_5000 <- read.csv("mass-action-sample_50_50_1_2_5000_1000.csv")
 
-
+#Manipulating the data for plotting
 design_matrix_cred_ivl_500 <- design_matrix_500 %>%
   group_by(n) %>%
   summarise(error_AB_25 = quantile(error_AB, 0.025), error_BC_25 = quantile(error_BC, 0.025), error_AB_975 = quantile(error_AB, 0.975), error_BC_975 = quantile(error_BC, 0.975), mean_error_AB = mean(error_AB)) %>%
@@ -130,8 +162,8 @@ design_matrix_cred_ivl <- rbind(design_matrix_cred_ivl_100, design_matrix_cred_i
 design_matrix_cred_ivl$samp_size <- factor(design_matrix_cred_ivl$samp_size)
 levels(design_matrix_cred_ivl$samp_size) <- c("N = 100", "N = 500", "N = 1000", "N = 5000")
 
+#P3
 ggplot(design_matrix_cred_ivl, aes(n)) + geom_ribbon(alpha = 0.1, aes(ymax = error_AB_975, ymin = error_AB_25)) + geom_line(aes(y = mean_error_AB)) + facet_wrap(vars(samp_size), nrow = 2) + geom_hline(yintercept = 0) + geom_vline(xintercept = 2) + labs(title = "95% Credible Interval of Variance Invariant for Different Sample Sizes", x = "Tested Exponent n", y = "Variance Invariant Error", caption = TeX("$<x_1> = 50$, $<x_2> = 50$, $\\beta_1 = 1$, $n = 2$")) + theme_bw() + theme(text = element_text(size=20), plot.title = element_text(hjust = 0.5))
-
 ```
 
 
